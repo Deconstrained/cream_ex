@@ -111,7 +111,7 @@ defmodule Cream.Cluster.Worker do
   defp find_conn_and_server(state, key) do
     {:ok, server} = Continuum.find(state.continuum, key)
     conn = state.connection_map[server]
-    Logger.debug("Connection found for key #{key}: server ID #{server}, #{inspect(conn)}")
+    Logger.info("Connection found for key #{key}: server ID #{server}, #{inspect(conn)}")
     {conn, server}
   end
 
