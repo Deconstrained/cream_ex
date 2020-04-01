@@ -1,4 +1,5 @@
 defmodule Cream.Continuum do
+  require Logger
   @moduledoc false
 
   @points_per_server 160 # Dalli says this is the default in libmemcached.
@@ -13,6 +14,7 @@ defmodule Cream.Continuum do
         Enum.reduce 0..count-1, acc, fn i, acc ->
           hash = :crypto.hash(:sha, "#{server}:#{i}") |> Base.encode16
           {value, _} = hash |> String.slice(0, 8) |> Integer.parse(16)
+          Logger.debug("Initializing continuum at index i=#{i}, server #{server}: #{hash}, first 8 bytes base 10 value=#{value}")
           [{server, value} | acc]
         end
       end)
@@ -38,6 +40,8 @@ defmodule Cream.Continuum do
 
     # Get the server.
     {server_id, _} = elem(continuum, i)
+
+    Logger.debug("Searched for key=#{key} (hash=#{hkey}) in continuum, attempt=#{attempt}, index of server found = #{i}, server_id=#{server_id}")
 
     if alive?(server_id) do
       {:ok, server_id}
