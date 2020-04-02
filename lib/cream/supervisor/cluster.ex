@@ -1,4 +1,5 @@
 defmodule Cream.Supervisor.Cluster do
+  require Logger
   @moduledoc false
 
   use Supervisor
@@ -27,6 +28,7 @@ defmodule Cream.Supervisor.Cluster do
     # Pull out the memcachex specific options.
     memcachex_options = Keyword.get(options, :memcachex, [])
 
+    Logger.info("Initializing with options=#{inspect(options)}; memcachex_options=#{inspect(memcachex_options)}")
     # Each Memcache worker gets supervised.
     specs = Enum.map server_name_map, fn {server, name} ->
       {host, port} = parse_server(server)
