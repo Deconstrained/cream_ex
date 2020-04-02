@@ -35,6 +35,7 @@ defmodule Cream.Supervisor.Cluster do
       arguments = memcachex_options
         |> Keyword.merge(hostname: host, port: port)
 
+      Logger.info("Spawning memcachex worker with arguments: #{inspect(arguments)}")
       worker(
         Memcache,
         [arguments, [name: name]],
