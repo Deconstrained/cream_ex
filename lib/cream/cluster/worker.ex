@@ -7,25 +7,27 @@ defmodule Cream.Cluster.Worker do
 
   alias Cream.Continuum
 
-  def start_link(connection_map) do
-    GenServer.start_link(__MODULE__, connection_map)
+  def start_link(options) do
+    GenServer.start_link(__MODULE__, options)
   end
 
-  def init(connection_map) do
+  def init(options) do
+    connection_map = options[:connection_map]
+    namespace = Map.get(options, :namespace, nil)
+    digest_class = Map.get(options, :digest_class, :md5)
     Logger.debug "Starting: #{inspect connection_map}"
 
     continuum = connection_map
       |> Map.keys
       |> Continuum.new
 
-    {:ok, %{continuum: continuum, connection_map: connection_map}}
+    {:ok, %{continuum: continuum, connection_map: connection_map, namespace: namespace, digest_class: digest_class}}
   end
 
   def handle_call({:set, pairs, options}, _from, state) do
 
-    pairs_by_conn = Enum.group_by pairs, fn {key, _value} ->
-      find_conn(state, key)
-    end
+    pairs_by_conn = Enum.map(pairs, fn {key, value} -> {dalli_key(key), value} end)
+      |> Enum.group_by(fn {key, _value} -> find_conn(state, key) end)
 
     reply = Enum.reduce pairs_by_conn, %{}, fn {conn, pairs}, acc ->
       {:ok, responses} = Memcache.multi_set(conn, pairs, options)
@@ -45,7 +47,7 @@ defmodule Cream.Cluster.Worker do
   end
 
   def handle_call({:get, keys, options}, _from, state) do
-    keys_by_conn = Enum.group_by keys, fn key ->
+    keys_by_conn = valid_keys(state, keys) |> Enum.group_by fn key ->
       find_conn(state, key)
     end
 
@@ -60,7 +62,7 @@ defmodule Cream.Cluster.Worker do
   end
 
   def handle_call({:with_conn, keys, func}, _from, state) do
-    keys_by_conn_and_server = Enum.group_by keys, fn key ->
+    keys_by_conn_and_server = valid_keys(state, keys) |> Enum.group_by fn key ->
       find_conn_and_server(state, key)
     end
 
@@ -85,7 +87,8 @@ defmodule Cream.Cluster.Worker do
   end
 
   def handle_call({:delete, keys}, _from, state) do
-    Enum.group_by(keys, &find_conn(state, &1))
+    valid_keys(state, keys)
+      |> Enum.group_by(&find_conn(state, &1))
       |> Enum.reduce(%{}, fn {conn, keys}, results ->
         commands = Enum.map(keys, &{:DELETEQ, [&1]})
         case Memcache.Connection.execute_quiet(conn, commands) do
@@ -117,5 +120,28 @@ defmodule Cream.Cluster.Worker do
   defp find_conn(state, key) do
     find_conn_and_server(state, key) |> elem(0)
   end
+
+  defp dalli_key(state, key) do
+    namespace = Map.get(state, :namespace)
+    key = key_with_namespace(key, namespace)
+    if String.length(key) > 250 do
+      max_length_before_namespace = 212 - String.length(namespace || '')
+      # Lowercase hex digest for compatibility with Ruby's Digest
+      key_hash = :crypto.hash(key, state[:digest_class], :md5)) |> Base.encode16(case: :lower)
+      key = "#{String.slice(key, 0, max_length_before_namespace}:md5:#{key_hash}"
+    end
+    key
+  end
+
+  defp key_with_namespace(key, nil), do: key
+  defp key_with_namespace(key, ''), do: key
+  defp key_with_namespace(key, namespace), do: "#{namespace}:#{key}"
+
+
+  defp valid_keys(state, keys) do
+    Enum.map(keys, &dalli_key(state, &1))
+    |> Enum.filter(&(String.length(&1)>0))
+  end
+
 
 end

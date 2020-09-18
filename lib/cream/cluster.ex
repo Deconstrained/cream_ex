@@ -182,6 +182,7 @@ defmodule Cream.Cluster do
   * `:name` - Like name argument for `GenServer.start_link/3`. No default.
               Ignored if using module based cluster.
   * `:memcachex` - Keyword list passed through to `Memcache.start_link/2`
+  * `:namespace` - Prepend this value to all keys
 
   ## Example
 
@@ -189,7 +190,8 @@ defmodule Cream.Cluster do
   {:ok, cluster} = Cream.Cluster.start_link(
     servers: ["host1:11211", "host2:11211"],
     name: MyCluster,
-    memcachex: [ttl: 60, namespace: "foo"]
+    memcachex: [ttl: 60],
+    namespace: "foo"
   )
   ```
   """
